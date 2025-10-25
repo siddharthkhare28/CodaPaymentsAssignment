@@ -2,15 +2,21 @@ spring:
   application:
     name: roundRobin
 
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+
 roundrobin:
   servers:
-    - http://localhost:8081
-    - http://localhost:8082
-    - http://localhost:8083
+    - http://echo-1:8080
+    - http://echo-2:8080
+    - http://echo-3:8080
   
   # Server discovery configuration
-  server-discovery-strategy: file            # Options: static, file
-  server-discovery-file-path: servers.txt     # Path to server list file (when using file strategy)
+  server-discovery-strategy: file            # Using file discovery for Docker
+  server-discovery-file-path: servers.txt     # Path to server list file
   
   # Health check configuration
   health-check-interval: 10000        # Health check interval in milliseconds (10 seconds)

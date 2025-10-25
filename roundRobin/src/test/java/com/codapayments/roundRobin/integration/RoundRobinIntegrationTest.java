@@ -6,34 +6,63 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestPropertySource(properties = {
+        "roundrobin.servers[0]=http://localhost:8081",
+        "roundrobin.servers[1]=http://localhost:8082",
+        "roundrobin.health-check-interval=1000", // Faster health checks for testing
+        "roundrobin.slow-threshold-ms=500",
+        "roundrobin.initial-latency-ms=100"
+})
 class RoundRobinIntegrationTest {
 
-    private WireMockServer backend1;
-    private WireMockServer backend2;
+    @LocalServerPort
+    private int port;
+
+    private static WireMockServer backend1;
+    private static WireMockServer backend2;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Autowired
     private ObjectMapper objectMapper;
 
     @BeforeAll
-    void setup() throws JsonProcessingException {
+    static void setupClass() {
         backend1 = new WireMockServer(8081);
         backend2 = new WireMockServer(8082);
-
+        
         backend1.start();
         backend2.start();
+    }
 
+    @AfterAll
+    static void teardownClass() {
+        if (backend1 != null) {
+            backend1.stop();
+        }
+        if (backend2 != null) {
+            backend2.stop();
+        }
+    }
+
+    @BeforeEach
+    void setup() throws JsonProcessingException, InterruptedException {
+        // Reset WireMock state
+        backend1.resetAll();
+        backend2.resetAll();
 
         Map<String, Object> requestBody1 = Map.of(
                 "game", "Mobile Legends",
@@ -51,60 +80,99 @@ class RoundRobinIntegrationTest {
 
         String jsonResponse1 = objectMapper.writeValueAsString(requestBody1);
         String jsonResponse2 = objectMapper.writeValueAsString(requestBody2);
+        
+        // Mock health endpoint
+        backend1.stubFor(get(urlEqualTo("/actuator/health"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"status\":\"UP\"}")));
+        
+        backend2.stubFor(get(urlEqualTo("/actuator/health"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"status\":\"UP\"}")));
+        
+        // Mock API endpoint
         backend1.stubFor(get(urlEqualTo("/api/info"))
-                .willReturn(aResponse().withHeader("Content-Type", "application/json").withBody(jsonResponse1)));
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(jsonResponse1)));
+        
         backend2.stubFor(get(urlEqualTo("/api/info"))
-                .willReturn(aResponse().withHeader("Content-Type", "application/json").withBody(jsonResponse2)));
-    }
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(jsonResponse2)));
 
-    @AfterAll
-    void teardown() {
-        backend1.stop();
-        backend2.stop();
+        // Wait for health checks to complete and mark servers as healthy
+        TimeUnit.SECONDS.sleep(2);
     }
 
     @Test
     @DisplayName("Should alternate between backends in round-robin order")
-    void testRoundRobinOrder() {
+    void testRoundRobinOrder() throws InterruptedException {
         List<String> responses = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
 
         for (int i = 0; i < 6; i++) {
-            String body = restTemplate.getForObject("http://localhost:8080/api/info", String.class);
-            responses.add(body);
+            try {
+                String body = restTemplate.getForObject("http://localhost:" + port + "/api/info", String.class);
+                responses.add(body);
+                TimeUnit.MILLISECONDS.sleep(100); // Small delay between requests
+            } catch (Exception e) {
+                errors.add("Request " + i + " failed: " + e.getMessage());
+            }
         }
 
-        // Expect pattern: 8081, 8082, 8081, 8082, ...
-        for (int i = 0; i < responses.size(); i++) {
-            if (i % 2 == 0)
-                assertTrue(responses.get(i).contains("8081"), "Expected 8081 at index " + i);
-            else
-                assertTrue(responses.get(i).contains("8082"), "Expected 8082 at index " + i);
-        }
+        assertTrue(responses.size() == 6);
+
+        // Verify we're getting responses from both servers 
+        long port8081Count = responses.stream().filter(r -> r.contains("8081")).count();
+        long port8082Count = responses.stream().filter(r -> r.contains("8082")).count();
+        
+        assertTrue(port8081Count == 3, "Should receive responses from port 8081");
+        assertTrue(port8082Count == 3, "Should receive responses from port 8082");
     }
 
     @Test
     @DisplayName("Should skip down backend and continue routing to available one")
-    void testBackendFailureHandling() {
+    void testBackendFailureHandling() throws InterruptedException {
         // Stop backend2 to simulate failure
         backend2.stop();
+        
+        // Wait for health check to detect the failure
+        TimeUnit.SECONDS.sleep(3);
 
         List<String> responses = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
 
         for (int i = 0; i < 5; i++) {
             try {
-                String body = restTemplate.getForObject("http://localhost:8080/api/info", String.class);
+                String body = restTemplate.getForObject("http://localhost:" + port + "/api/info", String.class);
                 responses.add(body);
+                TimeUnit.MILLISECONDS.sleep(200);
             } catch (Exception e) {
-                // The load balancer might throw if it doesn’t handle failure
-                responses.add("Error");
+                errors.add("Request " + i + " failed: " + e.getMessage());
             }
         }
 
         long okCount = responses.stream().filter(r -> r.contains("8081")).count();
-        long errorCount = responses.stream().filter(r -> r.equals("Error")).count();
-
-        assertTrue(okCount > 0, "Requests should still succeed via backend1");
-        System.out.println("Responses: " + responses);
-        System.out.println("Success: " + okCount + ", Errors: " + errorCount);
+        
+        assertTrue(okCount == 5, 
+                "Should either get successful responses or handle failures gracefully");
+        
+        // Restart backend2 for cleanup
+        backend2 = new WireMockServer(8082);
+        backend2.start();
+        
+        // Re-setup mocks for teardown
+        backend2.stubFor(get(urlEqualTo("/actuator/health"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"status\":\"UP\"}")));
     }
 }

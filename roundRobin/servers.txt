@@ -1,0 +1,11 @@
+# Round Robin Load Balancer Server List
+# Lines starting with # are comments and will be ignored
+# Each line should contain one server URL
+
+http://echo-1:8080
+http://echo-2:8080
+http://echo-3:8080
+
+# You can add or remove servers here and they will be picked up
+# during the next health check cycle (every 10 seconds by default)
+# http://echo-4:8080

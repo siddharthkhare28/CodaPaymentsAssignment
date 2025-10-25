@@ -1,9 +1,0 @@
-spring:
-  application:
-    name : echo
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health
