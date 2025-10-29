@@ -46,7 +46,7 @@ class RoundRobinControllerTest {
                 .thenReturn(Mono.just(expectedResponse));
 
         // When
-        Mono<ResponseEntity<String>> result = controller.forwardRequest(
+        Mono<ResponseEntity<Object>> result = controller.forwardRequest(
                 requestBody, headers, params, method, request);
 
         // Then
@@ -61,7 +61,7 @@ class RoundRobinControllerTest {
         request.setRequestURI("/admin/health");
         
         // When
-        Mono<ResponseEntity<String>> result = controller.forwardRequest(
+        Mono<ResponseEntity<Object>> result = controller.forwardRequest(
                 null, Map.of(), Map.of(), HttpMethod.GET, request);
 
         // Then
@@ -76,7 +76,7 @@ class RoundRobinControllerTest {
         request.setRequestURI("/admin/stats/detailed");
         
         // When
-        Mono<ResponseEntity<String>> result = controller.forwardRequest(
+        Mono<ResponseEntity<Object>> result = controller.forwardRequest(
                 null, Map.of(), Map.of(), HttpMethod.GET, request);
 
         // Then
@@ -95,7 +95,7 @@ class RoundRobinControllerTest {
                 .thenReturn(Mono.just(expectedResponse));
 
         // When
-        Mono<ResponseEntity<String>> result = controller.forwardRequest(
+        Mono<ResponseEntity<Object>> result = controller.forwardRequest(
                 null, Map.of(), Map.of(), HttpMethod.GET, request);
 
         // Then
@@ -114,7 +114,7 @@ class RoundRobinControllerTest {
                 .thenReturn(Mono.just(expectedResponse));
 
         // When
-        Mono<ResponseEntity<String>> result = controller.forwardRequest(
+        Mono<ResponseEntity<Object>> result = controller.forwardRequest(
                 null, Map.of(), Map.of(), HttpMethod.GET, request);
 
         // Then
@@ -138,7 +138,7 @@ class RoundRobinControllerTest {
 
         for (HttpMethod method : methods) {
             // When
-            Mono<ResponseEntity<String>> result = controller.forwardRequest(
+            Mono<ResponseEntity<Object>> result = controller.forwardRequest(
                     null, Map.of(), Map.of(), method, request);
 
             // Then

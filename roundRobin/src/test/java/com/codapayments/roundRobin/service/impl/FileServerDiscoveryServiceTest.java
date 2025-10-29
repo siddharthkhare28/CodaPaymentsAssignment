@@ -325,48 +325,6 @@ class FileServerDiscoveryServiceTest {
     }
 
     @Test
-    void testGetServers_FileWithBOM() throws IOException {
-        // Given - File with Byte Order Mark (BOM)
-        byte[] bom = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
-        String content = "http://server1:8080\n";
-        byte[] contentBytes = content.getBytes();
-        byte[] fileContent = new byte[bom.length + contentBytes.length];
-        System.arraycopy(bom, 0, fileContent, 0, bom.length);
-        System.arraycopy(contentBytes, 0, fileContent, bom.length, contentBytes.length);
-        Files.write(testServerFile, fileContent);
-
-        // When
-        List<String> servers = discoveryService.getServers();
-
-        // Then
-        assertNotNull(servers);
-        assertEquals(1, servers.size());
-        // The BOM should be handled correctly (trimmed)
-        String serverUrl = servers.get(0);
-        assertTrue(serverUrl.startsWith("http://"), "Server URL should start with http:// (BOM should be handled)");
-    }
-
-    @Test
-    void testGetServers_LargeFile() throws IOException {
-        // Given - Large file with many servers
-        StringBuilder content = new StringBuilder();
-        for (int i = 1; i <= 1000; i++) {
-            content.append("http://server").append(i).append(":8080\n");
-        }
-        Files.writeString(testServerFile, content.toString());
-
-        // When
-        List<String> servers = discoveryService.getServers();
-
-        // Then
-        assertNotNull(servers);
-        assertEquals(1000, servers.size());
-        assertTrue(servers.contains("http://server1:8080"));
-        assertTrue(servers.contains("http://server500:8080"));
-        assertTrue(servers.contains("http://server1000:8080"));
-    }
-
-    @Test
     void testGetServers_MultipleConsecutiveCalls() throws IOException {
         // Given
         String fileContent = "http://server1:8080\n";

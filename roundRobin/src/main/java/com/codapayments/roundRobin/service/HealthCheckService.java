@@ -42,10 +42,11 @@ public class HealthCheckService {
     }
     
     private void refreshServerList() {
-        serverListLock.writeLock().lock();
-        try {
-            List<String> currentServers = serverDiscoveryService.getServers();
-            if (currentServers != null) {
+        List<String> currentServers = serverDiscoveryService.getServers();
+        
+        if (currentServers != null) {
+            serverListLock.writeLock().lock();
+            try {
                 // Add new servers
                 currentServers.forEach(server -> {
                     if (!serverHealthMap.containsKey(server)) {
@@ -56,19 +57,17 @@ public class HealthCheckService {
                     }
                 });
                 
-                // Remove servers that are no longer in the list (for dynamic discovery)
-                if (serverDiscoveryService.supportsDynamicUpdates()) {
-                    serverHealthMap.keySet().removeIf(server -> {
-                        if (!currentServers.contains(server)) {
-                            logger.info("Removed server from health tracking: {}", server);
-                            return true;
-                        }
-                        return false;
-                    });
-                }
+                // Remove servers that are no longer in the list
+                serverHealthMap.keySet().removeIf(server -> {
+                    if (!currentServers.contains(server)) {
+                        logger.info("Removed server from health tracking: {}", server);
+                        return true;
+                    }
+                    return false;
+                });
+            } finally {
+                serverListLock.writeLock().unlock();
             }
-        } finally {
-            serverListLock.writeLock().unlock();
         }
     }
 
@@ -203,8 +202,8 @@ public class HealthCheckService {
                 double avgResponseTime = health.getWindowAverageResponseTime();
                 int sampleCount = health.getWindowEntryCount();
                 
-                logger.warn("Server {} marked as slow based on moving average: {}% of {} responses " +
-                        "exceeded {}ms threshold (avg: {}ms) - applying {}s cooldown",
+                logger.warn("Server {} marked as slow based on moving average: {:.1f}% of {} responses " +
+                        "exceeded {}ms threshold (avg: {:.1f}ms) - applying {}s cooldown", 
                         serverUrl, slowRatio * 100, sampleCount, 
                         properties.getSlowThresholdMs(), avgResponseTime, 
                         properties.getSlownessCooldownSeconds());

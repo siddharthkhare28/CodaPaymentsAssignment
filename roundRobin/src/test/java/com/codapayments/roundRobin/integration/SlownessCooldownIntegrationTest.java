@@ -1,5 +1,6 @@
 package com.codapayments.roundRobin.integration;
 
+import com.codapayments.roundRobin.service.HealthCheckService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -55,6 +56,9 @@ class SlownessCooldownIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private HealthCheckService healthCheckService;
+
     @BeforeAll
     static void setupClass() {
         backend1 = new WireMockServer(8081);
@@ -79,6 +83,12 @@ class SlownessCooldownIntegrationTest {
         // Reset WireMock state
         backend1.resetAll();
         backend2.resetAll();
+
+        // Reset server health states to clear any slowness cooldowns from previous tests
+        healthCheckService.getAllServers().forEach(server -> {
+            server.clearSlownessCooldown();
+            server.setHealthy(true);
+        });
 
         setupHealthEndpoints();
         setupApiEndpoints();
@@ -191,11 +201,13 @@ class SlownessCooldownIntegrationTest {
                         .withBody(slowJsonResponse)
                         .withFixedDelay(600))); // Slow response (above 300ms threshold)
 
-        // Step 3: Make several requests to trigger slowness detection
-        for (int i = 0; i < 5; i++) {
+        // Step 3: Make enough requests to trigger slowness detection
+        // With round-robin, we need more requests to ensure backend2 gets enough samples
+        // Window size is 3, so backend2 needs at least 3 requests to trigger analysis
+        // With 60% threshold, we need at least 2 out of 3 requests to be slow
+        for (int i = 0; i < 10; i++) {
             String response = restTemplate.getForObject(baseUrl + "/api/info", String.class);
             assertNotNull(response);
-            Thread.sleep(100); // Small delay between requests
         }
 
         // Step 4: Wait for health check cycle to detect slowness
@@ -205,7 +217,7 @@ class SlownessCooldownIntegrationTest {
         int backend1Requests = 0;
         int backend2Requests = 0;
         
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 3; i++) {
             String response = restTemplate.getForObject(baseUrl + "/api/info", String.class);
             assertNotNull(response);
             
@@ -214,14 +226,14 @@ class SlownessCooldownIntegrationTest {
             } else if (response.contains("\"port\":\"8082\"")) {
                 backend2Requests++;
             }
-            
-            Thread.sleep(200);
         }
         
-        // During cooldown, backend1 should receive more requests
-        assertTrue(backend1Requests > backend2Requests, 
-                "Backend1 should receive more requests during backend2's cooldown period. " +
-                "Backend1: " + backend1Requests + ", Backend2: " + backend2Requests);
+        // During cooldown, backend1 should receive all requests
+        assertTrue(backend1Requests == 3, 
+                "Backend1 should receive all requests during backend2's cooldown period. ");
+
+        assertTrue(backend2Requests == 0, 
+                "Backend1 should receive all requests during backend2's cooldown period. ");
 
         // Step 6: Make backend2 fast again
         backend2.resetMappings();
@@ -302,10 +314,9 @@ class SlownessCooldownIntegrationTest {
                         .withFixedDelay(600))); // Slow
 
         // Make requests to trigger slowness detection
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 8; i++) {
             try {
                 restTemplate.getForObject(baseUrl + "/api/info", String.class);
-                Thread.sleep(100);
             } catch (Exception e) {
                 // Some requests might fail, that's expected
             }
@@ -337,17 +348,15 @@ class SlownessCooldownIntegrationTest {
             } catch (Exception e) {
                 // Other types of errors are also acceptable when servers are slow
             }
-            Thread.sleep(200);
         }
         
         // Verify the system handled the scenario appropriately
-        int totalHandledRequests = successfulRequests + serviceUnavailableErrors;
-        assertTrue(totalHandledRequests > 0, 
-            "Should handle requests with either success or appropriate error responses");
+        assertTrue(successfulRequests == 0, 
+            "all requests should fail when both servers are slow and in cooldown");
         
         // If we get service unavailable errors, that's actually correct behavior
         // when all servers are in cooldown
-        assertTrue(serviceUnavailableErrors > 0,
+        assertTrue(serviceUnavailableErrors == 3,
             "Service unavailable errors should not exceed total requests");
         
         

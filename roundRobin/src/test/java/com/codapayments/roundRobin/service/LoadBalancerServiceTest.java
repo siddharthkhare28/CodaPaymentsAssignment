@@ -55,14 +55,14 @@ class LoadBalancerServiceTest {
         // Given
         when(healthCheckService.getHealthyServers()).thenReturn(List.of());
 
-        ProxyRequest<String> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
+        ProxyRequest<Object> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
                 Map.of(), Map.of(), null);
 
         // When
-        Mono<ResponseEntity<String>> result = loadBalancerService.forwardRequest(request);
+        Mono<ResponseEntity<Object>> result = loadBalancerService.forwardRequest(request);
 
         // Then
-        ResponseEntity<String> response = result.block();
+        ResponseEntity<Object> response = result.block();
         assertNotNull(response);
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
     }
@@ -101,7 +101,7 @@ class LoadBalancerServiceTest {
         // Given
         when(healthCheckService.getHealthyServers()).thenReturn(List.of());
 
-        ProxyRequest<String> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
+        ProxyRequest<Object> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
                 Map.of(), Map.of(), null);
 
         // When
@@ -118,7 +118,7 @@ class LoadBalancerServiceTest {
         when(healthCheckService.getHealthyServers()).thenReturn(healthyServers);
         when(loadBalancingStrategy.selectServer(healthyServers)).thenReturn(null);
 
-        ProxyRequest<String> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
+        ProxyRequest<Object> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
                 Map.of(), Map.of(), null);
 
         // When
@@ -135,14 +135,14 @@ class LoadBalancerServiceTest {
         when(healthCheckService.getHealthyServers()).thenReturn(healthyServers);
         when(loadBalancingStrategy.selectServer(healthyServers)).thenReturn(null);
 
-        ProxyRequest<String> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
+        ProxyRequest<Object> request = new ProxyRequest<>("/api/test", HttpMethod.GET, 
                 Map.of(), Map.of(), null);
 
         // When
-        Mono<ResponseEntity<String>> result = loadBalancerService.forwardRequest(request);
+        Mono<ResponseEntity<Object>> result = loadBalancerService.forwardRequest(request);
 
         // Then
-        ResponseEntity<String> response = result.block();
+        ResponseEntity<Object> response = result.block();
         assertNotNull(response);
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         assertTrue(response.getBody().toString().contains("No healthy servers available"));

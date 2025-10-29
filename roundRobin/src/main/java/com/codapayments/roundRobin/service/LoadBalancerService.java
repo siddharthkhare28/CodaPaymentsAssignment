@@ -41,28 +41,24 @@ public class LoadBalancerService {
         this.properties = properties;
     }
 
-    public <T> Mono<ResponseEntity<T>> forwardRequest(ProxyRequest<T> request) {
+    public Mono<ResponseEntity<Object>> forwardRequest(ProxyRequest<Object> request) {
         return tryForwardRequest(request, 0);
     }
 
-    private <T> Mono<ResponseEntity<T>> tryForwardRequest(ProxyRequest<T> request, int attempt) {
+    private Mono<ResponseEntity<Object>> tryForwardRequest(ProxyRequest<Object> request, int attempt) {
         List<ServerHealth> healthyServers = healthCheckService.getHealthyServers();
         
         if (attempt >= healthyServers.size()) {
             logger.warn("All servers exhausted after {} attempts for {}", attempt, request.getPath());
-            @SuppressWarnings("unchecked")
-            T errorBody = (T) "All backend servers are unavailable";
             return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(errorBody));
+                    .body("All backend servers are unavailable"));
         }
 
         ServerHealth selectedServer = loadBalancingStrategy.selectServer(healthyServers);
         if (selectedServer == null) {
             logger.warn("No healthy servers available for {}", request.getPath());
-            @SuppressWarnings("unchecked")
-            T errorBody = (T) "No healthy servers available";
             return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(errorBody));
+                    .body("No healthy servers available"));
         }
 
         String targetUrl = selectedServer.getServerUrl() + request.getPath();
@@ -71,7 +67,7 @@ public class LoadBalancerService {
         return executeRequest(request, selectedServer, targetUrl, attempt);
     }
 
-    private <T> Mono<ResponseEntity<T>> executeRequest(ProxyRequest<T> request, 
+    private Mono<ResponseEntity<Object>> executeRequest(ProxyRequest<Object> request, 
                                                      ServerHealth selectedServer, 
                                                      String targetUrl, 
                                                      int attempt) {
@@ -104,17 +100,15 @@ public class LoadBalancerService {
         return responseMono
                 .map(response -> {
                     long responseTime = Duration.between(startTime, Instant.now()).toMillis();
-                    logger.info("✅ {} responded in {}ms for {} {}",
-                            selectedServer.getServerUrl(), responseTime, request.getMethod(), request.getPath());
-
                     healthCheckService.updateServerResponseTime(selectedServer.getServerUrl(), responseTime);
                     
-                    @SuppressWarnings("unchecked")
-                    T responseBody = (T) response.getBody();
+                    logger.info("✅ {} responded in {}ms for {} {}", 
+                            selectedServer.getServerUrl(), responseTime, request.getMethod(), request.getPath());
+                    
                     return ResponseEntity
                             .status(response.getStatusCode())
                             .headers(response.getHeaders())
-                            .body(responseBody);
+                            .body(response.getBody());
                 })
                 .onErrorResume(error -> {
                     long responseTime = Duration.between(startTime, Instant.now()).toMillis();
@@ -132,18 +126,16 @@ public class LoadBalancerService {
                         return tryForwardRequest(request, attempt + 1);
                     } else {
                         // HTTP status errors (4xx, 5xx) - server is responding, just return the error
-                        logger.warn("⚠️ {} returned error after {}ms for {} {}: {}",
-                                selectedServer.getServerUrl(), responseTime,
+                        logger.warn("⚠️ {} returned error after {}ms for {} {}: {}", 
+                                selectedServer.getServerUrl(), responseTime, 
                                 request.getMethod(), request.getPath(), error.getMessage());
-
+                        
                         // Still update response time since server responded
                         healthCheckService.updateServerResponseTime(selectedServer.getServerUrl(), responseTime);
-
+                        
                         // Return the actual HTTP error response without retrying
-                        @SuppressWarnings("unchecked")
-                        T errorBody = (T) ("Backend server error: " + error.getMessage());
                         return Mono.just(ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                                .body(errorBody));
+                                .body("Backend server error: " + error.getMessage()));
                     }
                 });
     }

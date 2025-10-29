@@ -23,10 +23,11 @@ public class RoundRobinController {
     /**
      * Main proxy endpoint that forwards all requests to backend servers
      * Excludes admin endpoints
+     * Note: Request body and response body can be of different types
      */
     @RequestMapping("/**")
-    public <T> Mono<ResponseEntity<T>> forwardRequest(
-            @RequestBody(required = false) T body,
+    public Mono<ResponseEntity<Object>> forwardRequest(
+            @RequestBody(required = false) Object body,
             @RequestHeader Map<String, String> headers,
             @RequestParam Map<String, String> params,
             HttpMethod method,
@@ -39,7 +40,7 @@ public class RoundRobinController {
             return Mono.empty();
         }
         
-        ProxyRequest<T> proxyRequest = new ProxyRequest<>(path, method, headers, params, body);
+        ProxyRequest<Object> proxyRequest = new ProxyRequest<>(path, method, headers, params, body);
         return loadBalancerService.forwardRequest(proxyRequest);
     }
 }

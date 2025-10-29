@@ -41,7 +41,6 @@ class HealthCheckServiceTest {
 
         when(webClientBuilder.build()).thenReturn(webClient);
         when(serverDiscoveryService.getServers()).thenReturn(List.of("http://localhost:8081", "http://localhost:8082"));
-        when(serverDiscoveryService.supportsDynamicUpdates()).thenReturn(false);
         
         healthCheckService = new HealthCheckService(webClientBuilder, properties, serverDiscoveryService);
     }    @Test
