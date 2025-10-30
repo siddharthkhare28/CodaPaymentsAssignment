@@ -202,8 +202,8 @@ public class HealthCheckService {
                 double avgResponseTime = health.getWindowAverageResponseTime();
                 int sampleCount = health.getWindowEntryCount();
                 
-                logger.warn("Server {} marked as slow based on moving average: {:.1f}% of {} responses " +
-                        "exceeded {}ms threshold (avg: {:.1f}ms) - applying {}s cooldown", 
+                logger.warn("Server {} marked as slow based on moving average: {}% of {} responses " +
+                        "exceeded {}ms threshold (avg: {}ms) - applying {}s cooldown",
                         serverUrl, slowRatio * 100, sampleCount, 
                         properties.getSlowThresholdMs(), avgResponseTime, 
                         properties.getSlownessCooldownSeconds());

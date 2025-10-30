@@ -100,10 +100,9 @@ public class LoadBalancerService {
         return responseMono
                 .map(response -> {
                     long responseTime = Duration.between(startTime, Instant.now()).toMillis();
-                    healthCheckService.updateServerResponseTime(selectedServer.getServerUrl(), responseTime);
-                    
-                    logger.info("✅ {} responded in {}ms for {} {}", 
+                    logger.info("✅ {} responded in {}ms for {} {}",
                             selectedServer.getServerUrl(), responseTime, request.getMethod(), request.getPath());
+                    healthCheckService.updateServerResponseTime(selectedServer.getServerUrl(), responseTime);
                     
                     return ResponseEntity
                             .status(response.getStatusCode())
